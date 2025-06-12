@@ -26,7 +26,7 @@ public:
     
     /*─······································································─*/
 
-    virtual int socket( const string_t& host, int port ) noexcept { 
+    virtual int socket( const string_t& host, int port ) const noexcept override { 
         if( host.empty() )
           { _EERROR(onError,"host is empty"); return -1; }
           
@@ -96,8 +96,8 @@ public:
         if( num < 0 ){ delete devices; return list; }
 
         for( int i=0; i<num; ++i ){ ptr_t<char> address (18,0);
-            ba2str( &(devices[i].bdaddr), &address );
-            list.push( address );
+             ba2str( &(devices[i].bdaddr), &address );
+             list.push( address );
         }   
         
         delete devices; return list;

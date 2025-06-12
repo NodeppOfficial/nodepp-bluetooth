@@ -28,6 +28,7 @@ protected:
 
     struct NODE {
         int                        state = 0;
+        int                        accept=-2;
         agent_t                    agent;
         poll_t                     poll ;
         function_t<void,bsocket_t> func ;
@@ -37,11 +38,12 @@ protected:
 
     template< class T > void add_socket( T& cli ) const noexcept {
         auto self = type::bind( this ); process::poll::add([=](){
-             self->onSocket.emit(cli); self->obj->func(cli); return -1;
+             self->onSocket.emit(cli); self->obj->func(cli); 
+             return -1;
         }); 
     }
 
-    int next() const noexcept {
+    int next() const noexcept { if( obj->state==0 ){ return -1; }
           if( obj->poll.emit()==-1 ){ return -1; } auto x = obj->poll.get_last_poll();
           if( x[0] >= 0 )
             { bsocket_t cli( x[1] ); cli.set_sockopt( obj->agent ); add_socket(cli); } 
@@ -60,12 +62,14 @@ public: bth_t() noexcept : obj( new NODE() ) {}
 
     bth_t( decltype(NODE::func) _func, agent_t* opt=nullptr ) noexcept : obj( new NODE() ) 
          { obj->func=_func; obj->agent=opt==nullptr?agent_t():*opt; }
+
+   ~bth_t() noexcept { if( obj.count() > 1 ){ return; } free(); }
     
     /*─······································································─*/
-    
-    void     close() const noexcept { if( obj->state<=0 ){ return; } obj->state=-1; onClose.emit(); }
-    
-    bool is_closed() const noexcept { return obj == nullptr ? 1 : obj->state <= 0; }
+
+    void     close() const noexcept { if(obj->state<=0){return;} obj->state=-1; onClose.emit(); }
+
+    bool is_closed() const noexcept { return obj == nullptr ? 1: obj->state<=0; }
     
     /*─······································································─*/
 
@@ -79,32 +83,29 @@ public: bth_t() noexcept : obj( new NODE() ) {}
              sk.socket( host, port ); 
              sk.set_sockopt( self->obj->agent ); 
         
-        if( sk.bind()   < 0 ){ _EERROR(onError,"Error while binding Bluetooth");   close(); sk.free(); return; }
-        if( sk.listen() < 0 ){ _EERROR(onError,"Error while listening Bluetooth"); close(); sk.free(); return; }
+        if( sk.bind()  <0 ){ _EERROR(onError,"Error while binding Bluetooth");   close(); sk.free(); return; }
+        if( sk.listen()<0 ){ _EERROR(onError,"Error while listening Bluetooth"); close(); sk.free(); return; }
         
-        cb( sk ); onOpen.emit( sk ); process::task::add([=](){
-            static int _accept = -2;
+        cb( sk ); onOpen.emit( sk ); process::poll::add([=](){
+            if( self->is_closed() || sk.is_closed() ){ return -1; }
         coStart
 
-            while( _accept == -2 ){
-               if( self->is_closed() || sk.is_closed() ) { coGoto(2); } 
-                   _accept = sk._accept(); if( _accept!=-2 ) { break; } 
-            while( self->next()==1 ){ coSet(3); return 0; coYield(3); } coYield(1); }
+            while( self->obj->accept == -2 ){
+               if( self->is_closed()|| sk.is_closed() ){ coGoto(2); } 
+                   self->obj->accept = sk._accept(); 
+               if( self->obj->accept!=-2 ){ break; } coYield(3);
+            while( self->next()==1 ){ coTry(3); } coNext; }
             
-            if ( _accept < 0 ){ _EERROR(self->onError,"Error while accepting TCP"); coGoto(2); }
-            do { if( self->obj->poll.push_read(_accept)==0 )
-               { bsocket_t cli( _accept ); cli.free(); } 
-               } while(0); _accept = -2; coSet(0); return 0; //coGoto(0); 
+            if( self->obj->accept<0 ){ _EERROR(self->onError,"Error while accepting TCP"); coGoto(2); }
+            do{ if( self->obj->poll.push_read(self->obj->accept)==0 )
+              { bsocket_t cli( self->obj->accept ); cli.free(); } 
+              } while(0); self->obj->accept=-2; coStay(0);
 
             coYield(2); self->close(); sk.free(); 
         
         coStop
         });
 
-    }
-
-    void listen( const string_t& host, int port ) const noexcept { 
-         listen( host, port, []( bsocket_t ){} ); 
     }
     
     /*─······································································─*/
@@ -119,20 +120,19 @@ public: bth_t() noexcept : obj( new NODE() ) {}
                   sk.socket( host, port ); 
                   sk.set_sockopt( self->obj->agent );
 
-        process::task::add([=](){
-            if( self->is_closed() ){ return -1; }
+        process::poll::add([=](){
+            if( self->is_closed() || sk.is_closed() ){ return -1; }
         coStart
 
-            while( sk._connect() == -2 ){ coNext; } 
-            if   ( sk._connect()  <  0 ){ 
+            coWait( sk._connect()==-2 ); if( sk._connect()<=0 ){
                 _EERROR(self->onError,"Error while connecting Bluetooth"); 
                 self->close(); coEnd; 
             }
 
-            if( self->obj->poll.push_write(sk.get_fd())==0 )
+            if( self->obj->poll.push_write( sk.get_fd() ) ==0 )
               { sk.free(); } while( self->obj->poll.emit()==0 ){ 
-                   if( process::now() > sk.get_send_timeout() )
-                     { coEnd; } coNext; } cb( sk );
+            if( process::now() > sk.get_send_timeout() )
+              { coEnd; } coNext; } cb( sk );
             
             sk.onClose.once([=](){ self->close(); }); 
             self->onSocket.emit(sk); sk.onOpen.emit();      
@@ -142,9 +142,24 @@ public: bth_t() noexcept : obj( new NODE() ) {}
         });
         
     }
+    
+    /*─······································································─*/
 
     void connect( const string_t& host, int port ) const noexcept { 
-         connect( host, port, []( bsocket_t ){} ); 
+        connect( host, port, [=]( bsocket_t ){} ); 
+   }
+
+    void listen( const string_t& host, int port ) const noexcept { 
+        listen( host, port, [=]( bsocket_t ){} ); 
+    }
+
+    /*─······································································─*/
+
+    void free() const noexcept {
+        if( is_closed() ){ return; } close();
+        onConnect.clear(); onSocket.clear();
+        onError  .clear(); onOpen  .clear();
+    //  onClose  .clear(); 
     }
 
 };
@@ -154,49 +169,33 @@ public: bth_t() noexcept : obj( new NODE() ) {}
 namespace bth {
 
     bth_t server( const bth_t& server ){ server.onSocket([=]( bsocket_t cli ){
-        cli.onDrain.once([=](){ cli.free(); cli.onData.clear(); });
-        ptr_t<_file_::read> _read = new _file_::read;
-
-        server.onConnect.once([=]( bsocket_t cli ){ process::poll::add([=](){
-            if(!cli.is_available() )    { cli.close(); return -1; }
-            if((*_read)(&cli)==1 )      { return 1; } 
-            if(  _read->state<=0 )      { return 1; }
-            cli.onData.emit(_read->data); return 1;
-        }) ; });
-
-        process::task::add([=](){
-            server.onConnect.emit(cli); return -1;
-        });
-
-    }); return server; }
+    process::task::add([=](){
+        skt.onConnect.once([=]( bsocket_t cli ){ stream::pipe(cli); });
+        cli.onDrain  .once([=](){ cli.free(); });
+        skt.onConnect.emit(cli);
+    return -1; }); }); return skt; }
 
     /*─······································································─*/
 
     bth_t server( agent_t* opt=nullptr ){
-        auto server = bth_t( [=]( bsocket_t /*unused*/ ){}, opt );
-        bth::server( server ); return server; 
+        auto skt = bth_t( [=]( bsocket_t /*unused*/ ){}, opt );
+        bth::server( skt ); return skt; 
     }
 
     /*─······································································─*/
 
-    bth_t client( const bth_t& client ){ client.onOpen.once([=]( bsocket_t cli ){
-        cli.onDrain.once([=](){ cli.free(); cli.onData.clear(); });
-        ptr_t<_file_::read> _read = new _file_::read;
-
-        process::poll::add([=](){
-            if(!cli.is_available() )    { cli.close(); return -1; }
-            if((*_read)(&cli)==1 )      { return 1; } 
-            if(  _read->state<=0 )      { return 1; }
-            cli.onData.emit(_read->data); return 1;
-        });
-
-    }); return client; }
+    bth_t client( const bth_t& skt ){ skt.onSocket.once([=]( bsocket_t cli ){
+        process::task::add([=](){
+            skt.onConnect.once([=]( bsocket_t cli ){ stream::pipe(cli); });
+            cli.onDrain  .once([=](){ cli.free(); });
+            skt.onConnect.emit(cli);
+        return -1; }); }); return skt; }
 
     /*─······································································─*/
 
     bth_t client( agent_t* opt=nullptr ){
-        auto client = bth_t( [=]( bsocket_t /*unused*/ ){}, opt );
-        bth::client( client ); return client; 
+        auto skt = bth_t( [=]( bsocket_t /*unused*/ ){}, opt );
+        bth::client( skt ); return skt; 
     }
     
 }

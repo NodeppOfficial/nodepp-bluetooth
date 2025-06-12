@@ -35,7 +35,7 @@ public:
     
     /*─······································································─*/
 
-    virtual int socket( const string_t& host, int port ) noexcept {
+    virtual int socket( const string_t& host, int port ) const noexcept override {
         if( host.empty() )
           { _EERROR(onError,"host is empty"); return -1; }
         
@@ -108,10 +108,9 @@ public:
 
         if( hFind == nullptr ) { BluetoothFindDeviceClose( hFind ); return list; }
 
-        do { 
-            ptr_t<char> name ( wcslen( deviceInfo.szName ) + 1, 0 );
-            wcstombs( &name, deviceInfo.szName, name.size() );
-            list.push({ &name, name.size() });
+        do { ptr_t<char> name ( wcslen( deviceInfo.szName ) + 1, 0 );
+             wcstombs( &name, deviceInfo.szName, name.size() );
+             list.push({ &name, name.size() });
         } while ( BluetoothFindNextDevice( hFind, &deviceInfo ) );
 
         BluetoothFindDeviceClose( hFind ); return list;
