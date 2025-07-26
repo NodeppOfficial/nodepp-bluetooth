@@ -30,19 +30,19 @@ public:
     
     /*─······································································─*/
 
-    template< class... T >
+    template < class... T >
     bsocket_t( T... args ) noexcept : socket_t( args... ) {}
     
     /*─······································································─*/
 
-    virtual int socket( const string_t& host, int port ) noexcept {
+    virtual int socket( const string_t& host, int port ) const noexcept override {
         if( host.empty() )
-          { process::error(onError,"host is empty"); return -1; }
+          { onError.emit("host is empty"); return -1; }
         
         obj->addrlen = sizeof( obj->server_addr ); socket::start_device();
 
-        if((obj->fd=::socket( AF, SOCK, PROT )) <= 0 )
-          { process::error(onError,"can't initializate socket fd"); return -1; } 
+        if((obj->fd=::socket( AF, SOCK, IPPROTO )) <= 0 )
+          { onError.emit("can't initializate socket fd"); return -1; } 
           
         set_buffer_size( CHUNK_SIZE );
         set_nonbloking_mode();
@@ -57,7 +57,7 @@ public:
         memset(&client, 0, sizeof(SOCKADDR_BTH));
 
         server.addressFamily = AF; if( port>0 )
-        server.port          = (ulong) port;
+        server.port          = (uint8_t) port;
 
         str2ba( host.c_str(), &server.btAddr );
         obj->server_addr = *((SOCKADDR*) &server);
@@ -108,10 +108,9 @@ public:
 
         if( hFind == nullptr ) { BluetoothFindDeviceClose( hFind ); return list; }
 
-        do { 
-            ptr_t<char> name ( wcslen( deviceInfo.szName ) + 1, 0 );
-            wcstombs( &name, deviceInfo.szName, name.size() );
-            list.push({ &name, name.size() });
+        do { ptr_t<char> name ( wcslen( deviceInfo.szName ) + 1, 0 );
+             wcstombs( &name, deviceInfo.szName, name.size() );
+             list.push({ &name, name.size() });
         } while ( BluetoothFindNextDevice( hFind, &deviceInfo ) );
 
         BluetoothFindDeviceClose( hFind ); return list;
