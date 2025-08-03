@@ -85,32 +85,18 @@ public:
                 self->close(); sk.free(); return; 
             }   cb( sk ); self->onOpen.emit( sk ); 
             
-            process::add( coroutine::add( COROUTINE(){
-            int c=-1; coBegin; coWait(!limit::fileno_ready());
+        process::poll( sk, POLL_STATE::READ, coroutine::add( COROUTINE(){
+        int c=-1; coBegin
 
-                while(!self->is_closed() && !sk.is_closed() ){ 
-                   if((c=sk._accept())!=-2 ){ break; }
-                coNext; }
+            coWait((c=sk._accept()) == -2 ); if( c<0 ){ 
+                self->onError.emit("Error while accepting Bluetooth"); 
+            coEnd; }
 
-                if( c<0 ){ 
-                    self->onError.emit("Error while accepting TCP"); 
-                coEnd; } socket_t cli(c); 
-                
-            process::add( coroutine::add( COROUTINE(){
-            coBegin cli.set_sockopt(self->obj->agent);
-                    self->onSocket.emit(cli); self->obj->func (cli);
-                if( cli.is_available() ){ self->onConnect.emit(cli); }
-            coFinish; }));
+            cli.set_sockopt(self->obj->agent);
+            self->onSocket.emit(cli); self->obj->func (cli);
+            if( cli.is_available() ){ self->onConnect.emit(cli); }
 
-            if( limit::fileno_count()%64==0 ){ coGoto(0); } coStay(0); coFinish }));
-
-        };
-
-        process::add( coroutine::add( COROUTINE(){
-        coBegin; coWait( !limit::fileno_ready() );
-                 clb();
-        coFinish
-        }));
+        coStay(0); coFinish })); }; clb();
 
     }
 
@@ -131,8 +117,8 @@ public:
                 self->close(); sk.free(); return; 
             }   sk.set_sockopt( self->obj->agent );
 
-        process::add( coroutine::add( COROUTINE(){
-        int c=0; coBegin; coWait(!limit::fileno_ready());
+        process::poll( sk, POLL_STATE::WRITE, coroutine::add( COROUTINE(){
+        int c=0; coBegin
 
             coWait( (c=sk._connect())==-2 ); if( c<=0 ){
                 self->onError.emit("Error while connecting Bluetooth");
@@ -148,13 +134,7 @@ public:
                 self->onConnect.emit(sk); 
             }
 
-        coFinish })); };
-
-        process::add( coroutine::add( COROUTINE(){
-        coBegin; coWait( !limit::fileno_ready() );
-                 clb();
-        coFinish
-        }));
+        coFinish })); }; clb();
 
     }
 
