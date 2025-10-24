@@ -26,14 +26,14 @@ public:
     
     /*─······································································─*/
 
-    virtual int socket( const string_t& host, int port ) noexcept { 
+    virtual int socket( const string_t& host, int port ) const noexcept override { 
         if( host.empty() )
-          { process::error(onError,"host is empty"); return -1; }
+          { onError.emit("host is empty"); return -1; }
           
-        skt->addrlen = sizeof( skt->server_addr ); socket::start_device();
+        skt->addrlen = sizeof( skt->server_addr );
 
-        if((obj->fd=::socket( AF, SOCK, PROT )) <= 0 )
-          { process::error(onError,"can't initializate socket fd"); return -1; } 
+        if((obj->fd=::socket( AF, SOCK, IPPROTO )) <= 0 )
+          { onError.emit("can't initializate socket fd"); return -1; } 
           
         set_buffer_size( CHUNK_SIZE );
         set_nonbloking_mode();
@@ -96,8 +96,8 @@ public:
         if( num < 0 ){ delete devices; return list; }
 
         for( int i=0; i<num; ++i ){ ptr_t<char> address (18,0);
-            ba2str( &(devices[i].bdaddr), &address );
-            list.push( address );
+             ba2str( &(devices[i].bdaddr), &address );
+             list.push( address );
         }   
         
         delete devices; return list;
