@@ -7,12 +7,12 @@
     #include <nodepp/dns.h>
     #include <nodepp/poll.h>
     #include <nodepp/socket.h>
-    #include "windows/bluetooth.cpp"
+    #include "windows/bluetooth.h"
 #elif _KERNEL_ == NODEPP_KERNEL_POSIX
     #include <nodepp/dns.h>
     #include <nodepp/poll.h>
     #include <nodepp/socket.h>
-    #include "posix/bluetooth.cpp"
+    #include "posix/bluetooth.h"
 #else
     #error "This OS Does not support bluetooth.h"
 #endif

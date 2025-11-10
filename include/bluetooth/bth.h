@@ -59,7 +59,7 @@ public:
 
     /*─······································································─*/
 
-    void listen( const string_t& host, int port, NODE_CLB cb ) const noexcept {
+    void listen( const string_t& host, int port, NODE_CLB cb=nullptr ) const noexcept {
         if( obj->state == 1 ){ return; }
 
         auto self = type::bind( this ); auto clb = [=](){
@@ -103,7 +103,7 @@ public:
 
     /*─······································································─*/
 
-    void connect( const string_t& host, int port, NODE_CLB cb ) const noexcept {
+    void connect( const string_t& host, int port, NODE_CLB cb=nullptr ) const noexcept {
         if( obj->state == 1 ){ return; } 
 
         auto self = type::bind(this); auto clb = [=](){
@@ -141,16 +141,6 @@ public:
 
     /*─······································································─*/
 
-    void connect( const string_t& host, int port ) const noexcept { 
-         connect( host, port, []( bsocket_t ){} );
-    }
-
-    void listen( const string_t& host, int port ) const noexcept { 
-         listen( host, port, []( bsocket_t ){} );
-    }
-
-    /*─······································································─*/
-
     void free() const noexcept {
         if( is_closed() ){ return; }close();
         onConnect.clear(); onSocket.clear();
@@ -163,12 +153,12 @@ public:
 
 namespace bth {
 
-    bth_t server( agent_t* opt=nullptr ){
-        auto skt = bth_t([=]( bsocket_t ){}, opt ); return skt;
+    inline bth_t server( agent_t* opt=nullptr ){
+        auto skt = bth_t( nullptr, opt ); return skt;
     }
 
-    bth_t client( agent_t* opt=nullptr ){
-        auto skt = bth_t([=]( bsocket_t ){}, opt ); return skt;
+    inline bth_t client( agent_t* opt=nullptr ){
+        auto skt = bth_t( nullptr, opt ); return skt;
     }
 
 }
