@@ -1,4 +1,5 @@
-#pragma once
+#ifndef NODEPP_POSIX_BLUETOOTH
+#define NODEPP_POSIX_BLUETOOTH
 
 /*────────────────────────────────────────────────────────────────────────────*/
 
@@ -27,21 +28,8 @@ public:
     /*─······································································─*/
 
     virtual int socket( const string_t& host, int port ) const noexcept override { 
-        if( host.empty() )
-          { onError.emit("host is empty"); return -1; }
-          
-        skt->addrlen = sizeof( skt->server_addr );
-
-        if((obj->fd=::socket( AF, SOCK, IPPROTO )) <= 0 )
-          { onError.emit("can't initializate socket fd"); return -1; } 
-          
-        set_buffer_size( CHUNK_SIZE );
-        set_nonbloking_mode();
-        set_reuse_address(1);
-
-    #if _KERNEL == NODEPP_KERNEL_POSIX
-        set_reuse_port(1);
-    #endif
+        if( host.empty() ){ onError.emit("host is empty"); return -1; }
+        socket_t::socket( host, port );
         
         SOCKADDR_RC server, client;
         memset(&server, 0, sizeof(SOCKADDR_RC));
@@ -53,7 +41,7 @@ public:
         str2ba( host.c_str(), &server.rc_bdaddr );
         skt->server_addr = *((SOCKADDR*) &server);
         skt->client_addr = *((SOCKADDR*) &client);
-        skt->len = sizeof( server ); return 1;       
+        skt->len = sizeof(server); /*-*/ return 1;  
     }
 
 };}
@@ -70,7 +58,7 @@ protected:
 
 public:
 
-    virtual ~bluetooth_t() noexcept {
+   ~bluetooth_t() noexcept {
         if( obj.count() > 1 ){ return; } 
             close( obj->sk );
     }
@@ -106,3 +94,5 @@ public:
 };}
 
 /*────────────────────────────────────────────────────────────────────────────*/
+
+#endif

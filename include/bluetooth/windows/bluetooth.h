@@ -1,4 +1,5 @@
-#pragma once
+#ifndef NODEPP_WINDOWS_BLUETOOTH
+#define NODEPP_WINDOWS_BLUETOOTH
 
 /*────────────────────────────────────────────────────────────────────────────*/
 
@@ -36,33 +37,20 @@ public:
     /*─······································································─*/
 
     virtual int socket( const string_t& host, int port ) const noexcept override {
-        if( host.empty() )
-          { onError.emit("host is empty"); return -1; }
-        
-        obj->addrlen = sizeof( obj->server_addr ); socket::start_device();
-
-        if((obj->fd=::socket( AF, SOCK, IPPROTO )) <= 0 )
-          { onError.emit("can't initializate socket fd"); return -1; } 
-          
-        set_buffer_size( CHUNK_SIZE );
-        set_nonbloking_mode();
-        set_reuse_address(1); 
-
-    #if _KERNEL == NODEPP_KERNEL_POSIX
-        set_reuse_port(1);
-    #endif
+        if( host.empty() ){ onError.emit("host is empty"); return -1; }
+        socket_t::socket( host, port );
         
         SOCKADDR_BTH server, client;
         memset(&server, 0, sizeof(SOCKADDR_BTH));
         memset(&client, 0, sizeof(SOCKADDR_BTH));
 
         server.addressFamily = AF; if( port>0 )
-        server.port          = (uint8_t) port;
+        server.port          = (uint32_t) port;
 
         str2ba( host.c_str(), &server.btAddr );
         obj->server_addr = *((SOCKADDR*) &server);
         obj->client_addr = *((SOCKADDR*) &client);
-        obj->len = sizeof( server ); return 1;
+        skt->len = sizeof(server); /*-*/ return 1;
     }
 
 };}
@@ -81,7 +69,7 @@ protected:
 
 public:
 
-    virtual ~bluetooth_t() noexcept {
+   ~bluetooth_t() noexcept {
         if( obj.count() > 1 ){ return; }
             CloseHandle( obj->hRadio );
     }
@@ -119,3 +107,5 @@ public:
 };}
 
 /*────────────────────────────────────────────────────────────────────────────*/
+
+#endif

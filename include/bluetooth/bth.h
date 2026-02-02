@@ -48,7 +48,7 @@ public:
     bth_t( NODE_CLB _func, agent_t* opt=nullptr ) noexcept : obj( new NODE() ) 
          { obj->func=_func; obj->agent=opt==nullptr?agent_t():*opt; }
 
-    virtual ~bth_t() noexcept { if( obj.count() > 1 ){ return; } free(); }
+   ~bth_t() noexcept { if( obj.count() > 1 ){ return; } free(); }
 
     bth_t() noexcept : obj( new NODE() ) {}
 
@@ -59,10 +59,11 @@ public:
 
     /*─······································································─*/
 
-    void listen( const string_t& host, int port, NODE_CLB cb ) const noexcept {
+    void listen( const string_t& host, int port, NODE_CLB cb=nullptr ) const noexcept {
         if( obj->state == 1 ){ return; }
 
         auto self = type::bind( this ); auto clb = [=](){
+        auto btch = type::bind<int>( MAX_BATCH );
 
             bsocket_t sk; obj->state = 1;
                 sk.AF     = AF_BTH; 
@@ -84,10 +85,12 @@ public:
                 self->close(); sk.free(); return -1; 
             }   cb( sk ); self->onOpen.emit( sk ); 
             
-        process::poll( sk, POLL_STATE::READ, coroutine::add( COROUTINE(){
-        int c=-1; coBegin
+        process::poll( sk, POLL_STATE::READ | POLL_STATE::EDGE, coroutine::add( COROUTINE(){
+        int c=-1; coBegin ; while( (*btch) --> 0 ){
 
-            coWait((c=sk._accept()) == -2 ); if( c<0 ){ 
+            while((c=sk._accept()) == -2 ){ coSet(0); return 0; }
+
+            if( c<0 ){ 
                 self->onError.emit("Error while accepting Bluetooth"); 
             coEnd; }
             
@@ -97,13 +100,13 @@ public:
             self->onSocket.emit(cli); self->obj->func (cli);
             if( cli.is_available() ){ self->onConnect.emit(cli); }
 
-        coStay(0); coFinish })); return -1; }; process::foop( clb );
+        } *btch = MAX_BATCH; coGoto(0); coFinish })); return -1; }; process::foop( clb );
 
     }
 
     /*─······································································─*/
 
-    void connect( const string_t& host, int port, NODE_CLB cb ) const noexcept {
+    void connect( const string_t& host, int port, NODE_CLB cb=nullptr ) const noexcept {
         if( obj->state == 1 ){ return; } 
 
         auto self = type::bind(this); auto clb = [=](){
@@ -118,7 +121,7 @@ public:
                 self->close(); sk.free(); return -1; 
             }   sk.set_sockopt( self->obj->agent );
 
-        process::poll( sk, POLL_STATE::WRITE, coroutine::add( COROUTINE(){
+        process::add( coroutine::add( COROUTINE(){
         int c=0; coBegin
 
             coWait( (c=sk._connect())==-2 ); if( c<=0 ){
@@ -141,16 +144,6 @@ public:
 
     /*─······································································─*/
 
-    void connect( const string_t& host, int port ) const noexcept { 
-         connect( host, port, []( bsocket_t ){} );
-    }
-
-    void listen( const string_t& host, int port ) const noexcept { 
-         listen( host, port, []( bsocket_t ){} );
-    }
-
-    /*─······································································─*/
-
     void free() const noexcept {
         if( is_closed() ){ return; }close();
         onConnect.clear(); onSocket.clear();
@@ -163,12 +156,12 @@ public:
 
 namespace bth {
 
-    bth_t server( agent_t* opt=nullptr ){
-        auto skt = bth_t([=]( bsocket_t ){}, opt ); return skt;
+    inline bth_t server( agent_t* opt=nullptr ){
+        auto skt = bth_t( nullptr, opt ); return skt;
     }
 
-    bth_t client( agent_t* opt=nullptr ){
-        auto skt = bth_t([=]( bsocket_t ){}, opt ); return skt;
+    inline bth_t client( agent_t* opt=nullptr ){
+        auto skt = bth_t( nullptr, opt ); return skt;
     }
 
 }
